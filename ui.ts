@@ -43,21 +43,7 @@ export const renderStatus = (
 
   const parts: string[] = [];
 
-  // Prefill speed
-  const prefillColor = t.promptPerSecond >= 2000 ? green : t.promptPerSecond >= 500 ? yellow : red;
-  const avg = engine.avgPrefillSpeed;
-  parts.push(
-    dim("pp:") + " " + prefillColor(`${fmt(t.promptPerSecond)} t/s`) +
-    (avg > 0 ? dim(` (avg ${fmt(avg)})`) : ""),
-  );
-
-  // Gen speed
-  if (t.predictedPerSecond > 0) {
-    const genColor = t.predictedPerSecond >= 100 ? green : t.predictedPerSecond >= 50 ? yellow : red;
-    parts.push(dim("gen:") + " " + genColor(`${fmt(t.predictedPerSecond)} t/s`));
-  }
-
-  // Cache status
+  // Cache status (the primary value of this extension)
   if (engine.isCacheMiss) {
     parts.push(red(`CACHE MISS ${fmt(t.promptN)}/${fmt(t.nPast)}`));
   } else if (t.nPast > 0) {
@@ -65,6 +51,10 @@ export const renderStatus = (
     const cacheColor = ratio < 0.1 ? green : ratio < 0.5 ? yellow : red;
     parts.push(cacheColor(`cache δ${fmt(t.promptN)}/${fmt(t.nPast)}`));
   }
+
+  // Prefill speed (complements pi-token-speed which shows wall-clock; we show server-reported t/s)
+  const prefillColor = t.promptPerSecond >= 2000 ? green : t.promptPerSecond >= 500 ? yellow : red;
+  parts.push(prefillColor(`${fmt(t.promptPerSecond)} t/s`));
 
   // MTP (ik_llama only)
   if (t.draftGenerated !== null && t.draftAccepted !== null) {
