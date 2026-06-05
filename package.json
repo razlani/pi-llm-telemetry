@@ -4,7 +4,10 @@
   "description": "Live inference telemetry for llama.cpp servers — prefill speed, cache hit/miss alerts, MTP acceptance",
   "main": "index.ts",
   "pi": {
-    "version": ">=0.37.3"
+    "version": ">=0.37.3",
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "keywords": ["pi", "extension", "telemetry", "llama.cpp", "cache"],
   "license": "MIT"
