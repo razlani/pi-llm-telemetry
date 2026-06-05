@@ -126,44 +126,57 @@ export class TelemetryEngine {
   }
 
   private parseTimings(text: string): TimingSnapshot | null {
-    // Parse the last "prompt eval time" line
-    const promptMatches = [...text.matchAll(
-      /prompt eval time\s*=\s*([\d.]+)\s*ms\s*\/\s*(\d+)\s*tokens\s*\(\s*[\d.]+\s*ms per token,\s*([\d.]+)\s*tokens per second\)/g
-    )];
-    if (promptMatches.length === 0) return null;
-    const pm = promptMatches[promptMatches.length - 1];
+    // Split log into per-request blocks. Each block ends with a release_slots line.
+    // Parse the LAST complete block (prompt eval + optional gen eval + release_slots).
+    const lines = text.split("\n");
+    let lastBlock: string[] = [];
+    let currentBlock: string[] = [];
 
-    // Parse the last "eval time" (generation) line — distinct from "prompt eval time"
+    for (const line of lines) {
+      currentBlock.push(line);
+      if (line.includes("release_slots")) {
+        lastBlock = currentBlock;
+        currentBlock = [];
+      }
+    }
+
+    if (lastBlock.length === 0) return null;
+    const block = lastBlock.join("\n");
+
+    // Parse prompt eval from this block
+    const pm = block.match(
+      /prompt eval time\s*=\s*([\d.]+)\s*ms\s*\/\s*(\d+)\s*tokens\s*\(\s*[\d.]+\s*ms per token,\s*([\d.]+)\s*tokens per second\)/
+    );
+    if (!pm) return null;
+
+    // Parse gen eval from this block
     let predictedN = 0, predictedMs = 0, predictedPerSecond = 0;
-    const genMatches = [...text.matchAll(
-      /(?<!prompt )eval time\s*=\s*([\d.]+)\s*ms\s*\/\s*(\d+)\s*tokens\s*\(\s*[\d.]+\s*ms per token,\s*([\d.]+)\s*tokens per second\)/g
-    )];
-    if (genMatches.length > 0) {
-      const gm = genMatches[genMatches.length - 1];
+    const gm = block.match(
+      /(?<!prompt )eval time\s*=\s*([\d.]+)\s*ms\s*\/\s*(\d+)\s*tokens\s*\(\s*[\d.]+\s*ms per token,\s*([\d.]+)\s*tokens per second\)/
+    );
+    if (gm) {
       predictedMs = parseFloat(gm[1]);
       predictedN = parseInt(gm[2], 10);
       predictedPerSecond = parseFloat(gm[3]);
     }
 
-    // Parse release_slots for n_past and n_cache_tokens
+    // Parse release_slots from this block
     let nPast = 0, nCacheTokens = 0;
-    const releaseMatches = [...text.matchAll(
-      /release_slots.*?n_past=(\d+).*?n_cache_tokens=(\d+)/g
-    )];
-    if (releaseMatches.length > 0) {
-      const rm = releaseMatches[releaseMatches.length - 1];
+    const rm = block.match(
+      /release_slots.*?n_past=(\d+).*?n_cache_tokens=(\d+)/
+    );
+    if (rm) {
       nPast = parseInt(rm[1], 10);
       nCacheTokens = parseInt(rm[2], 10);
     }
 
-    // Parse MTP draft acceptance (ik_llama only)
+    // Parse MTP draft acceptance from this block (ik_llama only)
     let draftAccepted: number | null = null;
     let draftGenerated: number | null = null;
-    const draftMatches = [...text.matchAll(
-      /draft acceptance rate\s*=\s*[\d.]+\s*\(\s*(\d+)\s*accepted\s*\/\s*(\d+)\s*generated\)/g
-    )];
-    if (draftMatches.length > 0) {
-      const dm = draftMatches[draftMatches.length - 1];
+    const dm = block.match(
+      /draft acceptance rate\s*=\s*[\d.]+\s*\(\s*(\d+)\s*accepted\s*\/\s*(\d+)\s*generated\)/
+    );
+    if (dm) {
       draftAccepted = parseInt(dm[1], 10);
       draftGenerated = parseInt(dm[2], 10);
     }

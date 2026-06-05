@@ -261,6 +261,44 @@ console.log("Test 10: Empty/missing log");
   assert(engine.dataPoints === 0, "zero data points");
 }
 
+// Test 11: Multi-request turn (tool calls) — must parse LAST complete block, not mix blocks
+console.log("Test 11: Multi-request turn (block-based parsing)");
+{
+  // Simulates: request 1 (6073 tokens, n_past=6144), request 2 (3080 tokens, n_past=3980),
+  // request 3 (7062 tokens, n_past=7354). Extension should report request 3's numbers.
+  const multiLog = `slot print_timing: id  0 | task 2542 |
+prompt eval time =    2354.11 ms /  6073 tokens (    0.39 ms per token,  2579.75 tokens per second)
+       eval time =     100.00 ms /    10 tokens (   10.00 ms per token,   100.00 tokens per second)
+draft acceptance rate = 1.00000 (    2 accepted /     2 generated)
+INFO [           release_slots] slot released | id_slot=0 id_task=2542 n_ctx=131072 n_past=6144 n_cache_tokens=6144
+slot print_timing: id  0 | task 2617 |
+prompt eval time =     984.67 ms /  3080 tokens (    0.32 ms per token,  3127.96 tokens per second)
+       eval time =      50.00 ms /     5 tokens (   10.00 ms per token,   100.00 tokens per second)
+INFO [           release_slots] slot released | id_slot=0 id_task=2617 n_ctx=131072 n_past=3980 n_cache_tokens=3980
+slot print_timing: id  0 | task 3520 |
+prompt eval time =    2621.74 ms /  7062 tokens (    0.37 ms per token,  2693.63 tokens per second)
+       eval time =     120.00 ms /    15 tokens (    8.00 ms per token,   125.00 tokens per second)
+draft acceptance rate = 0.71429 (    5 accepted /     7 generated)
+INFO [           release_slots] slot released | id_slot=0 id_task=3520 n_ctx=131072 n_past=7354 n_cache_tokens=7354
+`;
+  writeFileSync(REAL_LOG, multiLog);
+  const engine = new TelemetryEngine();
+  engine.init();
+  (engine as any)._logOffset = 0;
+  engine.readLatestTimings();
+  const t = engine.lastTimings;
+
+  assert(t !== null, "should parse multi-request log");
+  assert(t!.promptN === 7062, `promptN should be 7062 (last block), got ${t!.promptN}`);
+  assert(t!.nPast === 7354, `nPast should be 7354 (last block), got ${t!.nPast}`);
+  assert(t!.nCacheTokens === 7354, `nCacheTokens should be 7354, got ${t!.nCacheTokens}`);
+  assert(Math.abs(t!.promptPerSecond - 2693.63) < 0.01, `pp/s should be 2693.63, got ${t!.promptPerSecond}`);
+  assert(t!.predictedN === 15, `predictedN should be 15 (last block), got ${t!.predictedN}`);
+  assert(Math.abs(t!.predictedPerSecond - 125.0) < 0.01, `gen/s should be 125, got ${t!.predictedPerSecond}`);
+  assert(t!.draftAccepted === 5, `draftAccepted should be 5 (last block), got ${t!.draftAccepted}`);
+  assert(t!.draftGenerated === 7, `draftGenerated should be 7 (last block), got ${t!.draftGenerated}`);
+}
+
 // --- Cleanup ---
 restoreLog();
 
