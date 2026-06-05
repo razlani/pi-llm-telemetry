@@ -1,0 +1,11 @@
+{
+  "name": "pi-llm-telemetry",
+  "version": "0.1.0",
+  "description": "Live inference telemetry for llama.cpp servers — prefill speed, cache hit/miss alerts, MTP acceptance",
+  "main": "index.ts",
+  "pi": {
+    "version": ">=0.37.3"
+  },
+  "keywords": ["pi", "extension", "telemetry", "llama.cpp", "cache"],
+  "license": "MIT"
+}
