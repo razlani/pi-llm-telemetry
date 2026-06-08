@@ -57,10 +57,15 @@ export const renderStatus = (
   parts.push(prefillColor(`${fmt(t.promptPerSecond)} t/s`));
 
   // MTP (ik_llama only)
-  if (t.draftGenerated !== null && t.draftAccepted !== null) {
-    const rate = t.draftGenerated > 0 ? t.draftAccepted / t.draftGenerated : 0;
-    const mtpColor = rate >= 0.8 ? cyan : rate >= 0.5 ? yellow : red;
-    parts.push(dim("mtp:") + " " + mtpColor(`${t.draftAccepted}/${t.draftGenerated}`));
+  if (t.draftGenerated !== null && t.draftAccepted !== null && t.draftGenerated > 0) {
+    const rate = t.draftAccepted / t.draftGenerated;
+    const pct = Math.round(rate * 100);
+    const sessionRate = engine.sessionMtpRate;
+    const sessionPct = sessionRate !== null ? Math.round(sessionRate * 100) : null;
+    const displayRate = sessionRate ?? rate;
+    const mtpColor = displayRate >= 0.75 ? cyan : displayRate >= 0.6 ? yellow : red;
+    const label = sessionPct !== null ? `${pct}% (avg ${sessionPct}%)` : `${pct}%`;
+    parts.push(dim("mtp:") + " " + mtpColor(label));
   }
 
   ctx.ui.setStatus(key, parts.join(dim(" | ")));

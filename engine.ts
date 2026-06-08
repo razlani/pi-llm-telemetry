@@ -27,10 +27,17 @@ export class TelemetryEngine {
   private _requestStartTime = 0;
   private _isCacheMiss = false;
   private _dataPoints = 0;
+  private _totalDraftAccepted = 0;
+  private _totalDraftGenerated = 0;
 
   get lastTimings() { return this._lastTimings; }
   get isCacheMiss() { return this._isCacheMiss; }
   get dataPoints() { return this._dataPoints; }
+
+  get sessionMtpRate(): number | null {
+    if (this._totalDraftGenerated === 0) return null;
+    return this._totalDraftAccepted / this._totalDraftGenerated;
+  }
 
   get avgPrefillSpeed(): number {
     if (this._prefillSpeedHistory.length === 0) return 0;
@@ -112,6 +119,11 @@ export class TelemetryEngine {
     if (snapshot.predictedPerSecond > 0) {
       this._genSpeedHistory.push(snapshot.predictedPerSecond);
       if (this._genSpeedHistory.length > ROLLING_WINDOW) this._genSpeedHistory.shift();
+    }
+
+    if (snapshot.draftAccepted !== null && snapshot.draftGenerated !== null) {
+      this._totalDraftAccepted += snapshot.draftAccepted;
+      this._totalDraftGenerated += snapshot.draftGenerated;
     }
 
     // Cache miss detection (skip first 3 data points — cold start)
