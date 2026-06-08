@@ -43,20 +43,22 @@ export const renderStatus = (
 
   const parts: string[] = [];
 
-  // Cache status (the primary value of this extension)
+  // Cache: "HIT 95%" or "MISS — full reprefill 80k tokens"
   if (engine.isCacheMiss) {
-    parts.push(red(`CACHE MISS ${fmt(t.promptN)}/${fmt(t.nPast)}`));
+    parts.push(red(`MISS ${fmt(t.promptN)} reprefilled`));
   } else if (t.nPast > 0) {
-    const ratio = t.promptN / t.nPast;
-    const cacheColor = ratio < 0.1 ? green : ratio < 0.5 ? yellow : red;
-    parts.push(cacheColor(`cache δ${fmt(t.promptN)}/${fmt(t.nPast)}`));
+    const hitPct = Math.round((1 - t.promptN / t.nPast) * 100);
+    const cacheColor = hitPct >= 95 ? green : hitPct >= 50 ? yellow : red;
+    parts.push(dim("cache ") + cacheColor(`${hitPct}%`));
   }
 
-  // Prefill speed (complements pi-token-speed which shows wall-clock; we show server-reported t/s)
-  const prefillColor = t.promptPerSecond >= 2000 ? green : t.promptPerSecond >= 500 ? yellow : red;
-  parts.push(prefillColor(`${fmt(t.promptPerSecond)} t/s`));
+  // Gen speed (what the user cares about — tokens generated per second)
+  if (t.predictedPerSecond > 0) {
+    const genColor = t.predictedPerSecond >= 90 ? green : t.predictedPerSecond >= 60 ? yellow : red;
+    parts.push(genColor(`${fmt(t.predictedPerSecond)} t/s`));
+  }
 
-  // MTP (ik_llama only)
+  // MTP: "mtp 61% / avg 74%"
   if (t.draftGenerated !== null && t.draftAccepted !== null && t.draftGenerated > 0) {
     const rate = t.draftAccepted / t.draftGenerated;
     const pct = Math.round(rate * 100);
@@ -64,8 +66,10 @@ export const renderStatus = (
     const sessionPct = sessionRate !== null ? Math.round(sessionRate * 100) : null;
     const displayRate = sessionRate ?? rate;
     const mtpColor = displayRate >= 0.75 ? cyan : displayRate >= 0.6 ? yellow : red;
-    const label = sessionPct !== null ? `${pct}% (avg ${sessionPct}%)` : `${pct}%`;
-    parts.push(dim("mtp:") + " " + mtpColor(label));
+    const label = sessionPct !== null && sessionPct !== pct
+      ? `${pct}%${dim("/")}avg ${sessionPct}%`
+      : `${pct}%`;
+    parts.push(dim("mtp ") + mtpColor(label));
   }
 
   ctx.ui.setStatus(key, parts.join(dim(" | ")));

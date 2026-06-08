@@ -1,6 +1,7 @@
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, appendFileSync } from "node:fs";
 
 const LOG_PATH = "/tmp/llama-server.log";
+const DEBUG_LOG = "/tmp/pi-telemetry-debug.log";
 const ROLLING_WINDOW = 20;
 const MISS_MULTIPLIER = 10;
 const MISS_FLOOR = 5000;
@@ -29,6 +30,7 @@ export class TelemetryEngine {
   private _dataPoints = 0;
   private _totalDraftAccepted = 0;
   private _totalDraftGenerated = 0;
+  private _pendingLogData = "";
 
   get lastTimings() { return this._lastTimings; }
   get isCacheMiss() { return this._isCacheMiss; }
@@ -65,30 +67,39 @@ export class TelemetryEngine {
     return Date.now() - this._requestStartTime;
   }
 
+  private _debugLog(msg: string) {
+    try { appendFileSync(DEBUG_LOG, `${Date.now()} ${msg}\n`); } catch {}
+  }
+
   init() {
     try {
       const stat = statSync(LOG_PATH);
       this._logOffset = stat.size;
+      this._debugLog(`init: offset=${this._logOffset}`);
     } catch {
       this._logOffset = 0;
+      this._debugLog(`init: log not found, offset=0`);
     }
   }
 
   markRequestStart() {
     this._requestStartTime = Date.now();
+    this._pendingLogData = "";
   }
 
   readLatestTimings(): boolean {
     this._requestStartTime = 0;
 
-    let newContent: string;
     try {
       const stat = statSync(LOG_PATH);
-      if (stat.size <= this._logOffset) {
+      const newBytes = stat.size - this._logOffset;
+      if (newBytes <= 0) {
         this._logOffset = stat.size;
-        return false;
+        this._debugLog(`no new data (offset=${this._logOffset}, size=${stat.size})`);
+        return this._pendingLogData.length > 0 ? this._tryParsePending() : false;
       }
-      const buf = Buffer.alloc(Math.min(stat.size - this._logOffset, 8192));
+      this._debugLog(`reading ${newBytes} bytes from offset ${this._logOffset}`);
+      const buf = Buffer.alloc(Math.min(newBytes, 16384));
       const fd = require("node:fs").openSync(LOG_PATH, "r");
       try {
         require("node:fs").readSync(fd, buf, 0, buf.length, this._logOffset);
@@ -96,13 +107,22 @@ export class TelemetryEngine {
         require("node:fs").closeSync(fd);
       }
       this._logOffset = stat.size;
-      newContent = buf.toString("utf-8");
-    } catch {
+      this._pendingLogData += buf.toString("utf-8");
+    } catch (e) {
+      this._debugLog(`read error: ${e}`);
       return false;
     }
 
-    const snapshot = this.parseTimings(newContent);
-    if (!snapshot) return false;
+    return this._tryParsePending();
+  }
+
+  private _tryParsePending(): boolean {
+    const snapshot = this.parseTimings(this._pendingLogData);
+    if (!snapshot) {
+      this._debugLog(`no complete block in pending (${this._pendingLogData.length} bytes, tail: ${this._pendingLogData.slice(-120)})`);
+      return false;
+    }
+    this._pendingLogData = "";
 
     this._lastTimings = snapshot;
     this._dataPoints++;
