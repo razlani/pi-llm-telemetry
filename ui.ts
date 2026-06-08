@@ -52,13 +52,19 @@ export const renderStatus = (
     parts.push(dim("cache ") + cacheColor(`${hitPct}%`));
   }
 
-  // Gen speed (what the user cares about — tokens generated per second)
-  if (t.predictedPerSecond > 0) {
-    const genColor = t.predictedPerSecond >= 90 ? green : t.predictedPerSecond >= 60 ? yellow : red;
-    parts.push(genColor(`${fmt(t.predictedPerSecond)} t/s`));
+  // Prefill speed
+  if (t.promptPerSecond > 0) {
+    const ppColor = t.promptPerSecond >= 1500 ? green : t.promptPerSecond >= 500 ? cyan : yellow;
+    parts.push(dim("pp ") + ppColor(`${fmt(t.promptPerSecond)}`));
   }
 
-  // MTP: "mtp 61% / avg 74%"
+  // Gen speed
+  if (t.predictedPerSecond > 0) {
+    const genColor = t.predictedPerSecond >= 90 ? green : t.predictedPerSecond >= 60 ? yellow : red;
+    parts.push(dim("gen ") + genColor(`${fmt(t.predictedPerSecond)}`));
+  }
+
+  // MTP: "mtp 61%/avg 74%"
   if (t.draftGenerated !== null && t.draftAccepted !== null && t.draftGenerated > 0) {
     const rate = t.draftAccepted / t.draftGenerated;
     const pct = Math.round(rate * 100);
