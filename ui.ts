@@ -71,7 +71,7 @@ export const renderStatus = (
     const sessionRate = engine.sessionMtpRate;
     const sessionPct = sessionRate !== null ? Math.round(sessionRate * 100) : null;
     const displayRate = sessionRate ?? rate;
-    const mtpColor = displayRate >= 0.75 ? cyan : displayRate >= 0.6 ? yellow : red;
+    const mtpColor = displayRate >= 0.73 ? cyan : displayRate >= 0.58 ? yellow : red;
     const label = sessionPct !== null && sessionPct !== pct
       ? `${pct}%${dim("/")}avg ${sessionPct}%`
       : `${pct}%`;
