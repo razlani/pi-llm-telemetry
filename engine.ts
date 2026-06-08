@@ -71,16 +71,15 @@ export class TelemetryEngine {
     this._requestStartTime = Date.now();
   }
 
-  readLatestTimings() {
+  readLatestTimings(): boolean {
     this._requestStartTime = 0;
 
     let newContent: string;
     try {
       const stat = statSync(LOG_PATH);
       if (stat.size <= this._logOffset) {
-        // Log was truncated or no new content
         this._logOffset = stat.size;
-        return;
+        return false;
       }
       const buf = Buffer.alloc(Math.min(stat.size - this._logOffset, 8192));
       const fd = require("node:fs").openSync(LOG_PATH, "r");
@@ -92,11 +91,11 @@ export class TelemetryEngine {
       this._logOffset = stat.size;
       newContent = buf.toString("utf-8");
     } catch {
-      return;
+      return false;
     }
 
     const snapshot = this.parseTimings(newContent);
-    if (!snapshot) return;
+    if (!snapshot) return false;
 
     this._lastTimings = snapshot;
     this._dataPoints++;
@@ -123,6 +122,7 @@ export class TelemetryEngine {
         this._isCacheMiss = true;
       }
     }
+    return true;
   }
 
   private parseTimings(text: string): TimingSnapshot | null {
