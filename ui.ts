@@ -43,13 +43,24 @@ export const renderStatus = (
 
   const parts: string[] = [];
 
-  // Cache: "HIT 95%" or "MISS — full reprefill 80k tokens"
+  // Cache: per-request hit% + session avg, with recent miss indicator
   if (engine.isCacheMiss) {
     parts.push(red(`MISS ${fmt(t.promptN)} reprefilled`));
   } else if (t.nPast > 0) {
     const hitPct = Math.round((1 - t.promptN / t.nPast) * 100);
+    const sessionAvg = engine.sessionCacheHitPct;
     const cacheColor = hitPct >= 95 ? green : hitPct >= 50 ? yellow : red;
-    parts.push(dim("cache ") + cacheColor(`${hitPct}%`));
+    let cacheStr = cacheColor(`${hitPct}%`);
+    if (sessionAvg >= 0 && sessionAvg !== hitPct) {
+      const avgColor = sessionAvg >= 90 ? green : sessionAvg >= 70 ? yellow : red;
+      cacheStr += dim("/") + avgColor(`avg ${sessionAvg}%`);
+    }
+    // Recent miss indicator (fades after 60s)
+    const missAgo = engine.lastMissSecondsAgo;
+    if (missAgo >= 0 && missAgo < 60) {
+      cacheStr += " " + red(`↓${missAgo}s ago`);
+    }
+    parts.push(dim("cache ") + cacheStr);
   }
 
   // Prefill speed

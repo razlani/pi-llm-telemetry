@@ -31,10 +31,25 @@ export class TelemetryEngine {
   private _totalDraftAccepted = 0;
   private _totalDraftGenerated = 0;
   private _pendingLogData = "";
+  private _lastMissTime = 0;
+  private _lastMissPromptN = 0;
+  private _cacheHitHistory: number[] = [];
 
   get lastTimings() { return this._lastTimings; }
   get isCacheMiss() { return this._isCacheMiss; }
   get dataPoints() { return this._dataPoints; }
+
+  get lastMissSecondsAgo(): number {
+    if (this._lastMissTime === 0) return -1;
+    return Math.round((Date.now() - this._lastMissTime) / 1000);
+  }
+
+  get lastMissPromptN(): number { return this._lastMissPromptN; }
+
+  get sessionCacheHitPct(): number {
+    if (this._cacheHitHistory.length === 0) return -1;
+    return Math.round(this._cacheHitHistory.reduce((a, b) => a + b, 0) / this._cacheHitHistory.length);
+  }
 
   get sessionMtpRate(): number | null {
     if (this._totalDraftGenerated === 0) return null;
@@ -151,10 +166,18 @@ export class TelemetryEngine {
     // NOT when the absolute delta is large (a big legitimate delta with good
     // prefix reuse is not a miss).
     this._isCacheMiss = false;
-    if (this._dataPoints > 3 && snapshot.nPast > 0) {
-      const ratio = snapshot.promptN / snapshot.nPast;
-      if (ratio > 0.8 && snapshot.promptN > MISS_FLOOR) {
-        this._isCacheMiss = true;
+    if (snapshot.nPast > 0) {
+      const hitPct = Math.round((1 - snapshot.promptN / snapshot.nPast) * 100);
+      this._cacheHitHistory.push(hitPct);
+      if (this._cacheHitHistory.length > ROLLING_WINDOW) this._cacheHitHistory.shift();
+
+      if (this._dataPoints > 3) {
+        const ratio = snapshot.promptN / snapshot.nPast;
+        if (ratio > 0.8 && snapshot.promptN > MISS_FLOOR) {
+          this._isCacheMiss = true;
+          this._lastMissTime = Date.now();
+          this._lastMissPromptN = snapshot.promptN;
+        }
       }
     }
     return true;
