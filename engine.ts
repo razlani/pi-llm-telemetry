@@ -147,10 +147,13 @@ export class TelemetryEngine {
     }
 
     // Cache miss detection (skip first 3 data points — cold start)
+    // Use ratio-based detection: a miss is when most of n_past was re-prefilled,
+    // NOT when the absolute delta is large (a big legitimate delta with good
+    // prefix reuse is not a miss).
     this._isCacheMiss = false;
-    if (this._dataPoints > 3) {
-      const median = this.medianPromptN;
-      if (snapshot.promptN > median * MISS_MULTIPLIER && snapshot.promptN > MISS_FLOOR) {
+    if (this._dataPoints > 3 && snapshot.nPast > 0) {
+      const ratio = snapshot.promptN / snapshot.nPast;
+      if (ratio > 0.8 && snapshot.promptN > MISS_FLOOR) {
         this._isCacheMiss = true;
       }
     }
