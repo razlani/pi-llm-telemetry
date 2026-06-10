@@ -16,6 +16,23 @@ export default (pi: ExtensionAPI) => {
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   dbg("extension loaded");
 
+  // Preserve thinking traces in conversation history to prevent KV cache prefix mismatch.
+  // Without this, Pi strips empty <think></think> tags from assistant responses between
+  // turns, causing the token sequence to diverge from what's in the server's KV cache.
+  pi.on("before_provider_request", async (event) => {
+    const payload = event.payload as Record<string, unknown>;
+    const kwargs = (payload.chat_template_kwargs as Record<string, unknown>) ?? {};
+    return {
+      ...payload,
+      chat_template_kwargs: {
+        ...kwargs,
+        enable_thinking: false,
+        clear_thinking: false,
+        preserve_thinking: true,
+      },
+    };
+  });
+
   const clearPoll = () => {
     if (pollTimer) {
       clearInterval(pollTimer);
