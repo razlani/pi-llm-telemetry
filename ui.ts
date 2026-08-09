@@ -21,6 +21,18 @@ const fmt = (n: number): string => {
   return n.toFixed(0);
 };
 
+// Status writes are driven by timers (poll interval + message_end retries), so they can
+// land after the session they captured `ctx` from has been replaced. Since pi 0.83.0 the
+// extension runner throws on `ctx.ui` access for a stale ctx, and an uncaught throw from a
+// timer callback kills the whole process. Swallow it — a dropped status line is harmless.
+const setStatus = (ctx: ExtensionContext, key: string, value: string): void => {
+  try {
+    ctx.ui.setStatus(key, value);
+  } catch {
+    /* stale ctx after session replacement — drop this frame */
+  }
+};
+
 export const renderStatus = (
   ctx: ExtensionContext,
   engine: TelemetryEngine,
@@ -29,13 +41,13 @@ export const renderStatus = (
   const t = engine.lastTimings;
 
   if (!t && !engine.isPrefilling) {
-    ctx.ui.setStatus(key, dim("Telemetry: waiting..."));
+    setStatus(ctx, key, dim("Telemetry: waiting..."));
     return;
   }
 
   if (engine.isPrefilling) {
     const elapsed = (engine.prefillElapsedMs / 1000).toFixed(1);
-    ctx.ui.setStatus(key, dim(`prefilling ${elapsed}s...`));
+    setStatus(ctx, key, dim(`prefilling ${elapsed}s...`));
     return;
   }
 
@@ -89,5 +101,5 @@ export const renderStatus = (
     parts.push(dim("mtp ") + mtpColor(label));
   }
 
-  ctx.ui.setStatus(key, parts.join(dim(" | ")));
+  setStatus(ctx, key, parts.join(dim(" | ")));
 };
