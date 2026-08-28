@@ -1,6 +1,40 @@
-import { readFileSync, statSync, appendFileSync } from "node:fs";
+import { readFileSync, statSync, appendFileSync, readdirSync, realpathSync } from "node:fs";
 
-const LOG_PATH = "/tmp/llama-server.log";
+// The server writes ONE log per `go` profile (/tmp/llama-server.log for `primary`,
+// /tmp/llama-server-<profile>.log for the rest). This used to be the constant
+// "/tmp/llama-server.log", which meant the status bar silently showed nothing for every profile
+// except primary -- it tailed a stale file and logged `no new data` forever.
+//
+// Resolution order (first hit wins):
+//   1. $PI_LLAMA_LOG            -- explicit override, for tests and odd setups
+//   2. /tmp/llama-server-current.log -- symlink maintained by llama-server-tornet-start
+//   3. newest-mtime /tmp/llama-server*.log -- fallback if the launcher predates the symlink
+// Re-resolved on every poll so switching profiles mid-session is picked up. Callers MUST reset
+// the byte offset when the resolved path changes -- offsets are per-file.
+const LOG_FALLBACK = "/tmp/llama-server.log";
+const CURRENT_LINK = "/tmp/llama-server-current.log";
+
+export function resolveLogPath(): string {
+  const override = process.env.PI_LLAMA_LOG;
+  if (override) return override;
+  try {
+    const real = realpathSync(CURRENT_LINK);
+    statSync(real);
+    return real;
+  } catch {}
+  try {
+    const candidates = readdirSync("/tmp")
+      .filter((f) => f.startsWith("llama-server") && f.endsWith(".log") && f !== "llama-server-current.log")
+      .map((f) => `/tmp/${f}`)
+      .map((f) => {
+        try { return { f, m: statSync(f).mtimeMs }; } catch { return { f, m: -1 }; }
+      })
+      .filter((c) => c.m >= 0)
+      .sort((a, b) => b.m - a.m);
+    if (candidates.length > 0) return candidates[0].f;
+  } catch {}
+  return LOG_FALLBACK;
+}
 const DEBUG_LOG = "/tmp/pi-telemetry-debug.log";
 const ROLLING_WINDOW = 20;
 const MISS_MULTIPLIER = 10;
@@ -25,6 +59,7 @@ export class TelemetryEngine {
   private _prefillSpeedHistory: number[] = [];
   private _genSpeedHistory: number[] = [];
   private _logOffset = 0;
+  private _logPath = resolveLogPath();
   private _requestStartTime = 0;
   private _isCacheMiss = false;
   private _dataPoints = 0;
@@ -86,11 +121,23 @@ export class TelemetryEngine {
     try { appendFileSync(DEBUG_LOG, `${Date.now()} ${msg}\n`); } catch {}
   }
 
+  // Re-resolve the log and, if it moved, restart the byte offset at the new file's end.
+  private _rebindLogPath(): string {
+    const p = resolveLogPath();
+    if (p !== this._logPath) {
+      this._debugLog(`log path changed: ${this._logPath} -> ${p}`);
+      this._logPath = p;
+      try { this._logOffset = statSync(p).size; } catch { this._logOffset = 0; }
+      this._pendingLogData = "";
+    }
+    return this._logPath;
+  }
+
   init() {
     try {
-      const stat = statSync(LOG_PATH);
+      const stat = statSync(this._rebindLogPath());
       this._logOffset = stat.size;
-      this._debugLog(`init: offset=${this._logOffset}`);
+      this._debugLog(`init: log=${this._logPath} offset=${this._logOffset}`);
     } catch {
       this._logOffset = 0;
       this._debugLog(`init: log not found, offset=0`);
@@ -106,7 +153,8 @@ export class TelemetryEngine {
     this._requestStartTime = 0;
 
     try {
-      const stat = statSync(LOG_PATH);
+      const logPath = this._rebindLogPath();
+      const stat = statSync(logPath);
       const newBytes = stat.size - this._logOffset;
       if (newBytes <= 0) {
         this._logOffset = stat.size;
@@ -115,7 +163,7 @@ export class TelemetryEngine {
       }
       this._debugLog(`reading ${newBytes} bytes from offset ${this._logOffset}`);
       const buf = Buffer.alloc(Math.min(newBytes, 16384));
-      const fd = require("node:fs").openSync(LOG_PATH, "r");
+      const fd = require("node:fs").openSync(logPath, "r");
       try {
         require("node:fs").readSync(fd, buf, 0, buf.length, this._logOffset);
       } finally {

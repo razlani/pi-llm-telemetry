@@ -18,10 +18,12 @@ function appendLog(content: string) {
   appendFileSync(REAL_LOG, content);
 }
 
-// Patch LOG_PATH for testing — we need to override the constant
-// Since the engine hardcodes /tmp/llama-server.log, we'll write there
-// and save/restore the original content
-const REAL_LOG = "/tmp/llama-server.log";
+// The engine no longer hardcodes a log path (2026-08-28): it resolves
+// $PI_LLAMA_LOG -> /tmp/llama-server-current.log -> newest /tmp/llama-server*.log.
+// Tests use the env override so they are hermetic and never touch a real server log.
+// MUST be set before any TelemetryEngine is constructed (`_logPath` is a field initializer).
+const REAL_LOG = "/tmp/pi-telemetry-test.log";
+process.env.PI_LLAMA_LOG = REAL_LOG;
 const { readFileSync } = require("node:fs");
 let originalLog: Buffer | null = null;
 try { originalLog = readFileSync(REAL_LOG); } catch {}
