@@ -1,7 +1,7 @@
 {
   "name": "pi-llm-telemetry",
   "version": "0.1.0",
-  "description": "Live inference telemetry for llama.cpp servers — prefill speed, cache hit/miss alerts, MTP acceptance",
+  "description": "Live inference telemetry for local llama.cpp servers in the pi status bar: prompt-cache hit rate, prefill and generation throughput, speculative-decoding acceptance, and cache-invalidation alerts",
   "main": "index.ts",
   "pi": {
     "version": ">=0.37.3",
@@ -9,6 +9,29 @@
       "./index.ts"
     ]
   },
-  "keywords": ["pi", "extension", "telemetry", "llama.cpp", "cache"],
-  "license": "MIT"
+  "keywords": [
+    "pi-package",
+    "pi",
+    "extension",
+    "telemetry",
+    "llama.cpp",
+    "ik_llama.cpp",
+    "prompt-cache",
+    "kv-cache",
+    "speculative-decoding",
+    "local-llm"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/razlani/pi-llm-telemetry.git"
+  },
+  "bugs": {
+    "url": "https://github.com/razlani/pi-llm-telemetry/issues"
+  },
+  "homepage": "https://github.com/razlani/pi-llm-telemetry#readme",
+  "author": "Riaz Amlani",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
 }
